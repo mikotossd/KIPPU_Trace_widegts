@@ -20,6 +20,7 @@ import com.kippu.trace.utils.LanguagePreferences
 import com.kippu.trace.viewmodel.EventViewModel
 import com.kippu.trace.widget.TraceWidgetSize
 import com.kippu.trace.widget.TraceWidgetUpdater
+import com.kippu.trace.widget.ui.WidgetBindingOverlay
 import java.util.Locale
 
 /**
