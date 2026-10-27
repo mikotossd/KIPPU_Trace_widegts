@@ -24,6 +24,7 @@ class EventViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val eventDao = AppDatabase.getDatabase(application).eventDao()
         repository = EventRepository(eventDao)
+        viewModelScope.launch { repository.advanceRepeatingEvents() }
         allEvents = repository.allEvents.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -81,6 +82,7 @@ class EventViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 withContext(Dispatchers.IO) {
                     repository.deleteAllAndInsertAll(events)
+                    repository.advanceRepeatingEvents()
                 }
                 TraceWidgetUpdater.requestAllUpdate(app)
                 onResult(true, app.getString(R.string.restore_success, events.size))

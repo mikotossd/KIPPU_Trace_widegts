@@ -1,6 +1,5 @@
 package com.kippu.trace
 
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -56,6 +55,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import java.time.LocalDate
+import kotlinx.coroutines.delay
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -70,6 +74,7 @@ import com.kippu.trace.utils.ThemeMode
 import com.kippu.trace.utils.ThemePreferences
 import com.kippu.trace.viewmodel.EventViewModel
 import com.kippu.trace.widget.TraceWidgetSize
+import com.kippu.trace.widget.TraceWidgetUpdater
 import com.kippu.trace.widget.WidgetImageCrop
 import com.kippu.trace.widget.WidgetImageTransform
 import java.time.Instant
@@ -79,6 +84,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var currentDate = LocalDate.now()
 
     // 小组件点击传入的 deep link eventId
     var deepLinkEventId by mutableStateOf<Long?>(null)
@@ -123,7 +129,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val today = LocalDate.now()
+                    if (today != currentDate) {
+                        currentDate = today
+                        TraceWidgetUpdater.requestAllUpdate(this@MainActivity)
+                    }
+                    delay(30_000)
+                }
+            }
+        }
         
+        // 调度自定义日期变更时间的闹钟（幂等，重复调用只会刷新到下一个触发点）
+        TraceWidgetUpdater.scheduleDayRollover(this)
+
         // 启动时的第一次硬性同步
         val initialMode = ThemePreferences.getThemeMode(this)
         val isInitialDark = when (initialMode) {
@@ -178,6 +199,8 @@ class MainActivity : ComponentActivity() {
     // 处理后台切回
     override fun onResume() {
         super.onResume()
+        currentDate = LocalDate.now()
+        TraceWidgetUpdater.requestAllUpdate(this)
         val currentMode = ThemePreferences.getThemeMode(this)
         val isDark = when (currentMode) {
             ThemeMode.SYSTEM -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES

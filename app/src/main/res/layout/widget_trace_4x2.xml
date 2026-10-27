@@ -113,7 +113,7 @@
                 android:shadowDx="0"
                 android:shadowDy="2"
                 android:shadowRadius="12"
-                android:text="--"
+                android:text="@string/widget_no_date"
                 android:textColor="#FFFFFFFF"
                 android:textSize="48sp"
                 android:textStyle="bold" />
@@ -123,7 +123,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:layout_marginBottom="10dp"
                 android:includeFontPadding="false"
                 android:shadowColor="#40000000"
                 android:shadowDx="0"

@@ -1,13 +1,16 @@
 package com.kippu.trace.data
 
 import com.kippu.trace.model.DateEvent
+import com.kippu.trace.utils.AnniversaryUtils
 import kotlinx.coroutines.flow.Flow
 
 class EventRepository(private val eventDao: EventDao) {
     val allEvents: Flow<List<DateEvent>> = eventDao.getAllEvents()
 
+    suspend fun advanceRepeatingEvents() = eventDao.advanceRepeatingEvents()
+
     suspend fun insert(event: DateEvent) {
-        eventDao.insertEvent(event)
+        eventDao.insertEvent(AnniversaryUtils.advance(event))
     }
 
     suspend fun delete(event: DateEvent) {
