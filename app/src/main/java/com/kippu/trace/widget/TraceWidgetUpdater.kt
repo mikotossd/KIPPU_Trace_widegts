@@ -9,10 +9,12 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Typeface
 import android.os.Build
+import android.os.Bundle
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.StyleSpan
+import android.util.Size
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -188,14 +190,11 @@ object TraceWidgetUpdater {
             } else null
 
             val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
-            val widthPx = dpToPx(context, options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0))
-                .takeIf { it > 0 } ?: widgetSize.backgroundWidthPx
-            val heightPx = dpToPx(context, options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0))
-                .takeIf { it > 0 } ?: widgetSize.backgroundHeightPx
+            val viewport = resolveViewportPx(context, widgetSize, options)
 
             appWidgetManager.updateAppWidget(
                 appWidgetId,
-                buildRemoteViews(context, widgetSize, event, appWidgetId, widthPx, heightPx),
+                buildRemoteViews(context, widgetSize, event, appWidgetId, viewport.width, viewport.height),
             )
         }
     }
@@ -443,6 +442,37 @@ object TraceWidgetUpdater {
     private fun calculateDays(dayChangeMinutes: Int, targetDateMillis: Long): Long {
         val today = TimeUtils.getEffectiveToday(rolloverMinutes = dayChangeMinutes)
         return TimeUtils.getDayCount(today, AnniversaryUtils.date(targetDateMillis))
+    }
+
+    /**
+     * 解析小组件当前的显示视口（像素）。
+     *
+     * OPTION_APPWIDGET_MAX_WIDTH 是「横屏下的最大宽」、OPTION_APPWIDGET_MAX_HEIGHT 是「竖屏下的最大高」，
+     * 两者混用会让非正方形规格的比例失真，因此竖屏取 (MIN_WIDTH, MAX_HEIGHT)、横屏取 (MAX_WIDTH, MIN_HEIGHT)。
+     * 拿不到 options 时回退到规格自带的 dp 尺寸，且同样经过 density 换算，避免高分屏生成低分辨率位图。
+     */
+    fun resolveViewportPx(context: Context, appWidgetId: Int, widgetSize: TraceWidgetSize): Size {
+        val options = AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
+        return resolveViewportPx(context, widgetSize, options)
+    }
+
+    private fun resolveViewportPx(context: Context, widgetSize: TraceWidgetSize, options: Bundle): Size {
+        val isPortrait = context.resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+        val widthDp = if (isPortrait) {
+            options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+        } else {
+            options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)
+        }
+        val heightDp = if (isPortrait) {
+            options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
+        } else {
+            options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+        }
+
+        return Size(
+            dpToPx(context, widthDp).takeIf { it > 0 } ?: dpToPx(context, widgetSize.fallbackWidthDp),
+            dpToPx(context, heightDp).takeIf { it > 0 } ?: dpToPx(context, widgetSize.fallbackHeightDp),
+        )
     }
 
     private fun dpToPx(context: Context, dp: Int): Int {

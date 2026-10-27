@@ -64,6 +64,13 @@ class WidgetConfigActivity : ComponentActivity() {
         setResult(RESULT_CANCELED)
 
         val widgetSize = TraceWidgetSize.resolve(this, appWidgetId) ?: TraceWidgetSize.TWO_BY_TWO
+        // 用真实视口比例（而非规格常量）驱动预览框，保证预览与桌面上的实际显示一致
+        val viewportPx = TraceWidgetUpdater.resolveViewportPx(this, appWidgetId, widgetSize)
+        val aspectRatio = if (viewportPx.height > 0) {
+            viewportPx.width.toFloat() / viewportPx.height
+        } else {
+            1f
+        }
         val initialTransform = TraceWidgetUpdater.getWidgetImageTransform(this, appWidgetId)
 
         setContent {
@@ -74,7 +81,7 @@ class WidgetConfigActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     WidgetBindingOverlay(
                         events = events,
-                        widgetSize = widgetSize,
+                        aspectRatio = aspectRatio,
                         initialTransform = initialTransform,
                         onConfirm = { event, imageTransform ->
                             TraceWidgetUpdater.saveWidgetBinding(

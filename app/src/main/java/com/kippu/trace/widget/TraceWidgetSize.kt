@@ -7,28 +7,26 @@ import com.kippu.trace.R
 // 小组件尺寸定义
 enum class TraceWidgetSize(
     val layoutRes: Int,
-    val backgroundWidthPx: Int,
-    val backgroundHeightPx: Int,
+    // 拿不到 AppWidgetOptions 时的兜底尺寸，单位 dp；统一经 density 换算成像素后再渲染
+    val fallbackWidthDp: Int,
+    val fallbackHeightDp: Int,
 ) {
     TWO_BY_TWO(
         layoutRes = R.layout.widget_trace_2x2,
-        backgroundWidthPx = 280,
-        backgroundHeightPx = 280,
+        fallbackWidthDp = 155,
+        fallbackHeightDp = 155,
     ),
     THREE_BY_TWO(
         layoutRes = R.layout.widget_trace_3x2,
-        backgroundWidthPx = 420,
-        backgroundHeightPx = 280,
+        fallbackWidthDp = 250,
+        fallbackHeightDp = 155,
     ),
     FOUR_BY_TWO(
         layoutRes = R.layout.widget_trace_4x2,
-        backgroundWidthPx = 640,
-        backgroundHeightPx = 320,
+        fallbackWidthDp = 330,
+        fallbackHeightDp = 155,
     ),
     ;
-
-    val aspectRatio: Float
-        get() = backgroundWidthPx.toFloat() / backgroundHeightPx
 
     companion object {
         fun fromProviderClassName(className: String): TraceWidgetSize? = when (className) {

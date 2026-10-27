@@ -78,7 +78,6 @@ import com.kippu.trace.utils.LanguagePreferences
 import com.kippu.trace.utils.ThemeMode
 import com.kippu.trace.utils.ThemePreferences
 import com.kippu.trace.viewmodel.EventViewModel
-import com.kippu.trace.widget.TraceWidgetSize
 import com.kippu.trace.widget.TraceWidgetUpdater
 import com.kippu.trace.widget.WidgetImageCrop
 import com.kippu.trace.widget.WidgetImageTransform
@@ -341,7 +340,7 @@ private enum class WidgetBindingStep {
 @Composable
 fun WidgetBindingOverlay(
     events: List<DateEvent>,
-    widgetSize: TraceWidgetSize,
+    aspectRatio: Float,
     initialTransform: WidgetImageTransform = WidgetImageTransform(),
     onConfirm: (DateEvent, WidgetImageTransform) -> Unit,
     onDismiss: () -> Unit,
@@ -386,7 +385,7 @@ fun WidgetBindingOverlay(
                     } else {
                         WidgetImageRangePanel(
                             event = event,
-                            widgetSize = widgetSize,
+                            aspectRatio = aspectRatio,
                             transform = { imageTransform },
                             onTransformChange = { imageTransform = it },
                             onReset = { imageTransform = WidgetImageTransform() },
@@ -452,7 +451,7 @@ private fun isUsableImageSize(size: Size): Boolean =
 @Composable
 private fun WidgetImageRangePanel(
     event: DateEvent,
-    widgetSize: TraceWidgetSize,
+    aspectRatio: Float,
     transform: () -> WidgetImageTransform,
     onTransformChange: (WidgetImageTransform) -> Unit,
     onReset: () -> Unit,
@@ -488,7 +487,7 @@ private fun WidgetImageRangePanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(widgetSize.aspectRatio)
+                .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black)
                 // key 只放图片地址：拖动过程中 transform 变化不得重启手势协程
