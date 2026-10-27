@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -35,17 +36,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +67,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.ui.theme.KIPPU_TraceTheme
@@ -382,7 +387,7 @@ fun WidgetBindingOverlay(
                         WidgetImageRangePanel(
                             event = event,
                             widgetSize = widgetSize,
-                            transform = imageTransform,
+                            transform = { imageTransform },
                             onTransformChange = { imageTransform = it },
                             onReset = { imageTransform = WidgetImageTransform() },
                             onBack = { step = WidgetBindingStep.SELECT },
@@ -438,18 +443,31 @@ private fun WidgetSelectionContent(
     }
 }
 
+// 预览图的最大解码边长；裁剪几何与分辨率无关，这里只保证观感清晰
+private const val PREVIEW_MAX_DECODE_PX = 1440
+
+private fun isUsableImageSize(size: Size): Boolean =
+    size.width.isFinite() && size.height.isFinite() && size.width > 0f && size.height > 0f
+
 @Composable
 private fun WidgetImageRangePanel(
     event: DateEvent,
     widgetSize: TraceWidgetSize,
-    transform: WidgetImageTransform,
+    transform: () -> WidgetImageTransform,
     onTransformChange: (WidgetImageTransform) -> Unit,
     onReset: () -> Unit,
     onBack: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    var imageSize by remember(event.backgroundUri) { mutableStateOf(IntSize.Zero) }
     val maskOpacity = event.maskOpacity.coerceIn(0.25f, 0.65f)
+    val context = LocalContext.current
+    val previewRequest = remember(event.backgroundUri) {
+        ImageRequest.Builder(context)
+            .data(event.backgroundUri)
+            .size(PREVIEW_MAX_DECODE_PX)
+            .build()
+    }
+    val imagePainter = rememberAsyncImagePainter(model = previewRequest)
 
     Column(
         modifier = Modifier
@@ -467,74 +485,68 @@ private fun WidgetImageRangePanel(
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
 
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(widgetSize.aspectRatio)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black)
-                .pointerInput(imageSize, transform) {
+                // key 只放图片地址：拖动过程中 transform 变化不得重启手势协程
+                .pointerInput(event.backgroundUri) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        if (imageSize.width <= 0 || imageSize.height <= 0) return@detectDragGestures
+                        val imageSize = imagePainter.intrinsicSize
+                        if (!isUsableImageSize(imageSize)) return@detectDragGestures
 
                         val boundsW = size.width.toFloat()
                         val boundsH = size.height.toFloat()
+                        val current = transform()
                         val drawRect = WidgetImageCrop.computeDrawRect(
-                            imageWidth = imageSize.width,
-                            imageHeight = imageSize.height,
+                            imageWidth = imageSize.width.roundToInt(),
+                            imageHeight = imageSize.height.roundToInt(),
                             boundsWidth = boundsW,
                             boundsHeight = boundsH,
-                            transform = transform,
+                            transform = current,
                         )
                         val maxPanX = (drawRect.width() - boundsW).coerceAtLeast(1f)
                         val maxPanY = (drawRect.height() - boundsH).coerceAtLeast(1f)
 
                         onTransformChange(
-                            transform.copy(
-                                offsetX = (transform.offsetX - dragAmount.x / maxPanX * 2f).coerceIn(-1f, 1f),
-                                offsetY = (transform.offsetY - dragAmount.y / maxPanY * 2f).coerceIn(-1f, 1f),
+                            current.copy(
+                                offsetX = (current.offsetX - dragAmount.x / maxPanX * 2f).coerceIn(-1f, 1f),
+                                offsetY = (current.offsetY - dragAmount.y / maxPanY * 2f).coerceIn(-1f, 1f),
                             ),
                         )
                     }
                 },
         ) {
-            val boundsW = constraints.maxWidth.toFloat()
-            val boundsH = constraints.maxHeight.toFloat()
-            val density = LocalDensity.current
+            // 尺寸固定，拖动只走 draw 阶段；绘制算法与 TraceWidgetBackgroundRenderer 同源
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val painterState = imagePainter.state
+                if (painterState !is AsyncImagePainter.State.Success) return@Canvas
+                val imageSize = painterState.painter.intrinsicSize
+                if (!isUsableImageSize(imageSize)) return@Canvas
 
-            if (!event.backgroundUri.isNullOrBlank()) {
-                AsyncImage(
-                    model = event.backgroundUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.None,
-                    onSuccess = { state ->
-                        val width = state.painter.intrinsicSize.width.roundToInt()
-                        val height = state.painter.intrinsicSize.height.roundToInt()
-                        if (width > 0 && height > 0) {
-                            imageSize = IntSize(width, height)
-                        }
-                    },
-                    modifier = if (imageSize == IntSize.Zero) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        val drawRect = WidgetImageCrop.computeDrawRect(
-                            imageWidth = imageSize.width,
-                            imageHeight = imageSize.height,
-                            boundsWidth = boundsW,
-                            boundsHeight = boundsH,
-                            transform = transform,
-                        )
-                        Modifier
-                            .offset {
-                                IntOffset(drawRect.left.roundToInt(), drawRect.top.roundToInt())
-                            }
-                            .size(
-                                width = with(density) { drawRect.width().toDp() },
-                                height = with(density) { drawRect.height().toDp() },
-                            )
-                    },
+                val drawRect = WidgetImageCrop.computeDrawRect(
+                    imageWidth = imageSize.width.roundToInt(),
+                    imageHeight = imageSize.height.roundToInt(),
+                    boundsWidth = size.width,
+                    boundsHeight = size.height,
+                    transform = transform(),
                 )
+
+                withTransform({
+                    translate(drawRect.left, drawRect.top)
+                    scale(
+                        scaleX = drawRect.width() / imageSize.width,
+                        scaleY = drawRect.height() / imageSize.height,
+                        pivot = Offset.Zero,
+                    )
+                }) {
+                    with(imagePainter) {
+                        draw(size = Size(imageSize.width, imageSize.height))
+                    }
+                }
             }
 
             Box(
