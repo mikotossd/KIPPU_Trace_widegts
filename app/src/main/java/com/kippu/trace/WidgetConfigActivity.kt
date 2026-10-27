@@ -73,6 +73,7 @@ class WidgetConfigActivity : ComponentActivity() {
             1f
         }
         val initialTransform = TraceWidgetUpdater.getWidgetImageTransform(this, appWidgetId)
+        val boundEventId = TraceWidgetUpdater.getBoundEventId(this, appWidgetId)
 
         setContent {
             val eventViewModel: EventViewModel = viewModel()
@@ -84,6 +85,7 @@ class WidgetConfigActivity : ComponentActivity() {
                         events = events,
                         aspectRatio = aspectRatio,
                         initialTransform = initialTransform,
+                        initialEventId = boundEventId,
                         onConfirm = { event, imageTransform ->
                             TraceWidgetUpdater.saveWidgetBinding(
                                 this@WidgetConfigActivity,

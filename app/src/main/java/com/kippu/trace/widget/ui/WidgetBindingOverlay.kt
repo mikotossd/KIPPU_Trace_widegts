@@ -62,6 +62,7 @@ fun WidgetBindingOverlay(
     events: List<DateEvent>,
     aspectRatio: Float,
     initialTransform: WidgetImageTransform = WidgetImageTransform(),
+    initialEventId: Long? = null,
     onConfirm: (DateEvent, WidgetImageTransform) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -92,7 +93,12 @@ fun WidgetBindingOverlay(
                             onConfirm(event, WidgetImageTransform())
                         } else {
                             selectedEvent = event
-                            imageTransform = initialTransform
+                            // 换一张卡片时应从默认居中开始；只有继续配置原本绑定的那张卡才沿用已有偏移
+                            imageTransform = if (event.id == initialEventId) {
+                                initialTransform
+                            } else {
+                                WidgetImageTransform()
+                            }
                             step = WidgetBindingStep.ADJUST_IMAGE
                         }
                     },

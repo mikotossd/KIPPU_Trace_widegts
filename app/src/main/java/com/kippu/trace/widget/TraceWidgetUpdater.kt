@@ -123,6 +123,10 @@ object TraceWidgetUpdater {
             .getLong(PREF_PREFIX_KEY + appWidgetId, -1L)
     }
 
+    // 读取小组件当前绑定的事件ID，未绑定返回 null（供绑定页判断「是否还是同一张卡」）
+    fun getBoundEventId(context: Context, appWidgetId: Int): Long? =
+        getWidgetEventId(context, appWidgetId).takeIf { it != -1L }
+
     fun getWidgetImageTransform(context: Context, appWidgetId: Int): WidgetImageTransform {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return WidgetImageTransform(
