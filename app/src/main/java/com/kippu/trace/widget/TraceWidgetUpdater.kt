@@ -42,6 +42,7 @@ object TraceWidgetUpdater {
     private const val PREF_PREFIX_KEY = "appwidget_"
     private const val PREF_OFFSET_X_SUFFIX = "_ox"
     private const val PREF_OFFSET_Y_SUFFIX = "_oy"
+    private const val PREF_SCALE_SUFFIX = "_oz"
     private val updateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     const val ACTION_ROLLOVER = "com.kippu.trace.action.DAY_ROLLOVER"
@@ -110,6 +111,7 @@ object TraceWidgetUpdater {
                 putLong(PREF_PREFIX_KEY + appWidgetId, eventId)
                 putFloat(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_X_SUFFIX, clamped.offsetX)
                 putFloat(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_Y_SUFFIX, clamped.offsetY)
+                putFloat(PREF_PREFIX_KEY + appWidgetId + PREF_SCALE_SUFFIX, clamped.scale)
             }
     }
 
@@ -132,6 +134,8 @@ object TraceWidgetUpdater {
         return WidgetImageTransform(
             offsetX = prefs.getFloat(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_X_SUFFIX, 0f),
             offsetY = prefs.getFloat(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_Y_SUFFIX, 0f),
+            // 旧版本没有存过缩放，缺省 1.0 即原有行为
+            scale = prefs.getFloat(PREF_PREFIX_KEY + appWidgetId + PREF_SCALE_SUFFIX, WidgetImageTransform.MIN_SCALE),
         ).clamped()
     }
 
@@ -142,6 +146,7 @@ object TraceWidgetUpdater {
                 remove(PREF_PREFIX_KEY + appWidgetId)
                 remove(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_X_SUFFIX)
                 remove(PREF_PREFIX_KEY + appWidgetId + PREF_OFFSET_Y_SUFFIX)
+                remove(PREF_PREFIX_KEY + appWidgetId + PREF_SCALE_SUFFIX)
             }
     }
 

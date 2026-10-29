@@ -12,10 +12,14 @@ import androidx.core.graphics.withClip
 import com.kippu.trace.model.DateEvent
 import java.io.File
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 // 小组件背景渲染器
 object TraceWidgetBackgroundRenderer {
     private const val CORNER_RADIUS_FRACTION = 0.075f
+
+    // 解码上限，与 FileUtils 导入时的 2K 上限对齐，避免放大后申请超大位图
+    private const val MAX_DECODE_EDGE = 2560
 
     // 渲染位图入口
     fun render(
@@ -67,8 +71,14 @@ object TraceWidgetBackgroundRenderer {
                 // 基础背景色
                 drawColor(Color.BLACK)
 
+                // 缩放倍率越高，可见区域越小，按倍率抬高解码目标以保持清晰度
+                val zoom = imageTransform.clamped().scale
                 val background = event.backgroundUri?.let {
-                    decodeSampledBitmap(it, width, height)
+                    decodeSampledBitmap(
+                        it,
+                        (width * zoom).roundToInt().coerceAtMost(MAX_DECODE_EDGE),
+                        (height * zoom).roundToInt().coerceAtMost(MAX_DECODE_EDGE),
+                    )
                 }
                 
                 if (background != null) {

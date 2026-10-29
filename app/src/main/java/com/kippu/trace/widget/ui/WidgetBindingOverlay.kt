@@ -3,7 +3,7 @@ package com.kippu.trace.widget.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +25,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -55,6 +56,47 @@ private const val PREVIEW_MAX_DECODE_PX = 1440
 
 private fun isUsableImageSize(size: Size): Boolean =
     size.width.isFinite() && size.height.isFinite() && size.width > 0f && size.height > 0f
+
+/**
+ * 以 [focus]（预览框内坐标）为锚点缩放：让手指下方的图像内容保持不动，
+ * 并同步反解归一化偏移量，否则捏合时画面会往框中心跑。
+ */
+private fun zoomAround(
+    imageSize: Size,
+    bounds: IntSize,
+    current: WidgetImageTransform,
+    focus: Offset,
+    zoomFactor: Float,
+): WidgetImageTransform {
+    val boundsW = bounds.width.toFloat()
+    val boundsH = bounds.height.toFloat()
+    val imageW = imageSize.width.roundToInt()
+    val imageH = imageSize.height.roundToInt()
+
+    val before = WidgetImageCrop.computeDrawRect(imageW, imageH, boundsW, boundsH, current)
+    if (before.width() <= 0f || before.height() <= 0f) return current
+
+    // 锚点落在图像内的归一化位置
+    val u = ((focus.x - before.left) / before.width()).coerceIn(0f, 1f)
+    val v = ((focus.y - before.top) / before.height()).coerceIn(0f, 1f)
+
+    val target = current.copy(scale = current.scale * zoomFactor).clamped()
+    if (target.scale == current.scale) return current
+
+    val after = WidgetImageCrop.computeDrawRect(imageW, imageH, boundsW, boundsH, target)
+    val maxPanX = (after.width() - boundsW).coerceAtLeast(0f)
+    val maxPanY = (after.height() - boundsH).coerceAtLeast(0f)
+
+    val desiredLeft = focus.x - u * after.width()
+    val desiredTop = focus.y - v * after.height()
+    val centeredLeft = (boundsW - after.width()) / 2f
+    val centeredTop = (boundsH - after.height()) / 2f
+
+    return target.copy(
+        offsetX = if (maxPanX > 0f) (centeredLeft - desiredLeft) * 2f / maxPanX else 0f,
+        offsetY = if (maxPanY > 0f) (centeredTop - desiredTop) * 2f / maxPanY else 0f,
+    ).clamped()
+}
 
 // 小组件绑定流程：选择事件后可调整图片展示范围
 @Composable
@@ -257,32 +299,33 @@ private fun WidgetImageRangePanel(
                 .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black)
-                // key 只放图片地址：拖动过程中 transform 变化不得重启手势协程
+                // key 只放图片地址：拖动/缩放过程中 transform 变化不得重启手势协程
                 .pointerInput(event.backgroundUri) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        val imageSize = imagePainter.intrinsicSize
-                        if (!isUsableImageSize(imageSize)) return@detectDragGestures
+                    // 单指拖动 = 平移；双指捏合 = 以两指中心为锚点缩放
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val intrinsic = imagePainter.intrinsicSize
+                        if (!isUsableImageSize(intrinsic)) return@detectTransformGestures
 
-                        val boundsW = size.width.toFloat()
-                        val boundsH = size.height.toFloat()
-                        val current = transform()
-                        val drawRect = WidgetImageCrop.computeDrawRect(
-                            imageWidth = imageSize.width.roundToInt(),
-                            imageHeight = imageSize.height.roundToInt(),
-                            boundsWidth = boundsW,
-                            boundsHeight = boundsH,
-                            transform = current,
-                        )
-                        val maxPanX = (drawRect.width() - boundsW).coerceAtLeast(1f)
-                        val maxPanY = (drawRect.height() - boundsH).coerceAtLeast(1f)
-
-                        onTransformChange(
-                            current.copy(
-                                offsetX = (current.offsetX - dragAmount.x / maxPanX * 2f).coerceIn(-1f, 1f),
-                                offsetY = (current.offsetY - dragAmount.y / maxPanY * 2f).coerceIn(-1f, 1f),
-                            ),
-                        )
+                        var next = transform()
+                        if (zoom != 1f) {
+                            next = zoomAround(intrinsic, size, next, centroid, zoom)
+                        }
+                        if (pan != Offset.Zero) {
+                            val drawRect = WidgetImageCrop.computeDrawRect(
+                                imageWidth = intrinsic.width.roundToInt(),
+                                imageHeight = intrinsic.height.roundToInt(),
+                                boundsWidth = size.width.toFloat(),
+                                boundsHeight = size.height.toFloat(),
+                                transform = next,
+                            )
+                            val maxPanX = (drawRect.width() - size.width).coerceAtLeast(1f)
+                            val maxPanY = (drawRect.height() - size.height).coerceAtLeast(1f)
+                            next = next.copy(
+                                offsetX = next.offsetX - pan.x / maxPanX * 2f,
+                                offsetY = next.offsetY - pan.y / maxPanY * 2f,
+                            )
+                        }
+                        onTransformChange(next.clamped())
                     }
                 },
         ) {
